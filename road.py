@@ -1,12 +1,16 @@
 import pygame
 import sys
+import ctypes
 
 # Initialize PyGame
 pygame.init()
 
+# Enable full Windows system decorations (title bar with minimize/maximize/close buttons)
+ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 1)
+
 # Screen setup
 WIDTH, HEIGHT = 800, 600
-screen = pygame.display.set_mode((WIDTH, HEIGHT))  # Create the game window
+screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)  # Create a resizable window
 pygame.display.set_caption("Map Editor - Press S or E, then Click")  # Set window title
 
 # Colors used in the game
