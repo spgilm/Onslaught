@@ -1,160 +1,235 @@
+# Map Generator with PyGame - Fully Commented Version
 import pygame
 import sys
-import ctypes
+import math
 
 # Initialize PyGame
 pygame.init()
 
-# Enable full Windows system decorations (title bar with minimize/maximize/close buttons)
-ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 1)
+# Constants for initial window size and frames per second
+WIDTH, HEIGHT = 800, 600
+FPS = 60
 
-# Logical screen size (fixed virtual coordinate system)
-LOGICAL_WIDTH, LOGICAL_HEIGHT = 800, 600
-is_fullscreen = False  # Track fullscreen state
-screen = pygame.display.set_mode((LOGICAL_WIDTH, LOGICAL_HEIGHT), pygame.RESIZABLE)
-pygame.display.set_caption("Map Editor - Press S or E to Place")
-
-# Colors
+# Color definitions (RGB tuples)
 WHITE = (255, 255, 255)
-GREEN = (0, 200, 0)
-RED = (200, 0, 0)
 BLACK = (0, 0, 0)
-YELLOW = (255, 215, 0)
+GREEN = (0, 255, 0)
+RED = (255, 0, 0)
+YELLOW = (255, 255, 0)
+BLUE = (0, 0, 255)
 
-# Font
-font = pygame.font.SysFont(None, 24)
+# Create the PyGame window with resizing support
+screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+pygame.display.set_caption("Map Generator")
+clock = pygame.time.Clock()
 
-# State
+# State flags
+full_screen = False
+placing_mode = None
+moving_point = None
+clicking_midpoint = False
+
+# Points
 start_point = None
 end_point = None
 waypoints = []
-mode = None  # 'start' or 'end'
+midpoints = []
+enemy = None
+enemy_path = []
+enemy_index = 0
+enemy_speed = 2
+undo_stack = []
+redo_stack = []
 
-dragging_start = False
-dragging_end = False
-dragging_waypoint_index = None
-mouse_offset = (0, 0)
+# UI elements
+play_button_rect = pygame.Rect(10, 10, 80, 30)
+playing = False
 
-# Main loop
+# Font for labels
+font = pygame.font.SysFont(None, 24)
+
+def draw_text(text, pos, color=BLACK):
+    img = font.render(text, True, color)
+    screen.blit(img, pos)
+
+def draw_circle_with_label(pos, color, label):
+    pygame.draw.circle(screen, color, pos, 15)
+    draw_text(label, (pos[0]-5, pos[1]-8), BLACK)
+
+def draw_flag(pos):
+    pygame.draw.polygon(screen, YELLOW, [(pos[0], pos[1]), (pos[0]+10, pos[1]-5), (pos[0]+10, pos[1]+5)])
+    pygame.draw.line(screen, BLACK, (pos[0], pos[1]), (pos[0], pos[1]+10), 2)
+
+def midpoint(p1, p2):
+    return ((p1[0] + p2[0]) // 2, (p1[1] + p2[1]) // 2)
+
+def is_point_near(pos, point, radius=15):
+    return (point and (abs(pos[0]-point[0])**2 + abs(pos[1]-point[1])**2) <= radius**2)
+
+def save_state():
+    state = (
+        start_point[:] if start_point else None,
+        end_point[:] if end_point else None,
+        [wp[:] for wp in waypoints]
+    )
+    undo_stack.append(state)
+    if len(undo_stack) > 50:
+        undo_stack.pop(0)
+    redo_stack.clear()
+
+def load_state(state):
+    global start_point, end_point, waypoints
+    start_point = state[0][:] if state[0] else None
+    end_point = state[1][:] if state[1] else None
+    waypoints = [wp[:] for wp in state[2]]
+
+def build_midpoints():
+    global midpoints
+    midpoints = []
+    path = [start_point] + waypoints + [end_point] if start_point and end_point else []
+    for i in range(len(path) - 1):
+        mp = midpoint(path[i], path[i + 1])
+        midpoints.append(mp)
+
+def build_enemy_path():
+    global enemy_path, enemy_index, enemy
+    enemy_path = [start_point] + waypoints + [end_point]
+    enemy_index = 0
+    enemy = enemy_path[0][:]
+
+def move_enemy():
+    global enemy, enemy_index, playing
+    if enemy_index >= len(enemy_path) - 1:
+        playing = False
+        return
+    target = enemy_path[enemy_index + 1]
+    dx, dy = target[0] - enemy[0], target[1] - enemy[1]
+    dist = math.hypot(dx, dy)
+    if dist < enemy_speed:
+        enemy = target[:]
+        enemy_index += 1
+    else:
+        enemy[0] += enemy_speed * dx / dist
+        enemy[1] += enemy_speed * dy / dist
+
 running = True
 while running:
-    # Get physical window size and calculate scale
-    window_width, window_height = screen.get_size()
-    scale_x = window_width / LOGICAL_WIDTH
-    scale_y = window_height / LOGICAL_HEIGHT
+    screen.fill(WHITE)
+    build_midpoints()
 
-    # Create a surface to render the scene at logical resolution
-    surface = pygame.Surface((LOGICAL_WIDTH, LOGICAL_HEIGHT))
-    surface.fill(WHITE)
+    pygame.draw.rect(screen, BLACK, play_button_rect, 2)
+    draw_text("Stop" if playing else "Play", (play_button_rect.x + 10, play_button_rect.y + 5))
 
-    # Construct full path and draw it
-    if start_point and end_point:
-        path = [start_point] + waypoints + [end_point]
-        for i in range(len(path) - 1):
-            pygame.draw.line(surface, BLACK, path[i], path[i + 1], 4)
+    path = [start_point] + waypoints + [end_point] if start_point and end_point else []
+    for i in range(len(path) - 1):
+        pygame.draw.line(screen, BLACK, path[i], path[i + 1], 3)
 
-            # Draw yellow circle with + at midpoint
-            mid_x = (path[i][0] + path[i + 1][0]) / 2
-            mid_y = (path[i][1] + path[i + 1][1]) / 2
-            pygame.draw.circle(surface, YELLOW, (int(mid_x), int(mid_y)), 8)
-            plus = font.render('+', True, BLACK)
-            surface.blit(plus, (mid_x - plus.get_width() // 2, mid_y - plus.get_height() // 2))
-
-    # Draw start point
     if start_point:
-        pygame.draw.circle(surface, GREEN, start_point, 12)
-        s_text = font.render('S', True, WHITE)
-        surface.blit(s_text, (start_point[0] - s_text.get_width() // 2, start_point[1] - s_text.get_height() // 2))
-
-    # Draw end point
+        draw_circle_with_label(start_point, GREEN, 'S')
     if end_point:
-        pygame.draw.circle(surface, RED, end_point, 12)
-        e_text = font.render('E', True, WHITE)
-        surface.blit(e_text, (end_point[0] - e_text.get_width() // 2, end_point[1] - e_text.get_height() // 2))
+        draw_circle_with_label(end_point, RED, 'E')
+    for wp in waypoints:
+        draw_flag(wp)
 
-    # Draw waypoint flags
-    for point in waypoints:
-        pygame.draw.polygon(surface, YELLOW, [
-            (point[0], point[1] - 10),
-            (point[0] + 10, point[1]),
-            (point[0], point[1] + 10)
-        ])
+    for mp in midpoints:
+        pygame.draw.circle(screen, YELLOW, mp, 10)
+        draw_text('+', (mp[0]-4, mp[1]-8), BLACK)
 
-    # Display instructions
-    instructions = "[S]et Start | [E]nd Point | Drag points to move | Click + to add waypoint | F11 Fullscreen"
-    text_surface = font.render(instructions, True, BLACK)
-    surface.blit(text_surface, ((LOGICAL_WIDTH - text_surface.get_width()) // 2, LOGICAL_HEIGHT - 30))
+    if playing and enemy:
+        move_enemy()
+        pygame.draw.circle(screen, BLUE, (int(enemy[0]), int(enemy[1])), 6)
 
-    # Scale and blit to the main screen
-    scaled_surface = pygame.transform.smoothscale(surface, (window_width, window_height))
-    screen.blit(scaled_surface, (0, 0))
+    pygame.display.flip()
+    clock.tick(FPS)
 
-    # Event handling
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
 
         elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_s:
-                mode = 'start'
-            elif event.key == pygame.K_e:
-                mode = 'end'
+            if event.key == pygame.K_ESCAPE:
+                running = False
             elif event.key == pygame.K_F11:
-                is_fullscreen = not is_fullscreen
-                if is_fullscreen:
-                    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
-                else:
-                    screen = pygame.display.set_mode((LOGICAL_WIDTH, LOGICAL_HEIGHT), pygame.RESIZABLE)
+                full_screen = not full_screen
+                screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN) if full_screen else pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+            elif event.key == pygame.K_s:
+                placing_mode = 'start'
+            elif event.key == pygame.K_e:
+                placing_mode = 'end'
+            elif event.key == pygame.K_z and undo_stack:
+                current_state = (
+                    start_point[:] if start_point else None,
+                    end_point[:] if end_point else None,
+                    [wp[:] for wp in waypoints]
+                )
+                redo_stack.append(current_state)
+                load_state(undo_stack.pop())
+            elif event.key == pygame.K_y and redo_stack:
+                save_state()
+                load_state(redo_stack.pop())
+            elif event.key == pygame.K_m:
+                clicking_midpoint = True
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
-            mouse_pos = pygame.Vector2(event.pos[0] / scale_x, event.pos[1] / scale_y)
-
-            if mode == 'start':
-                start_point = mouse_pos
-                mode = None
-            elif mode == 'end':
-                end_point = mouse_pos
-                mode = None
-            else:
-                # Start drag or place waypoint
-                if start_point and (pygame.Vector2(start_point) - mouse_pos).length() <= 12:
-                    dragging_start = True
-                    mouse_offset = mouse_pos - pygame.Vector2(start_point)
-                elif end_point and (pygame.Vector2(end_point) - mouse_pos).length() <= 12:
-                    dragging_end = True
-                    mouse_offset = mouse_pos - pygame.Vector2(end_point)
-                else:
-                    for i, point in enumerate(waypoints):
-                        if (pygame.Vector2(point) - mouse_pos).length() <= 12:
-                            dragging_waypoint_index = i
-                            mouse_offset = mouse_pos - pygame.Vector2(point)
-                            break
-
-                    # Check if clicked on any midpoint to insert a waypoint
+            mouse_pos = event.pos
+            if play_button_rect.collidepoint(mouse_pos):
+                if not playing:
                     if start_point and end_point:
-                        path = [start_point] + waypoints + [end_point]
-                        for i in range(len(path) - 1):
-                            mid_x = (path[i][0] + path[i + 1][0]) / 2
-                            mid_y = (path[i][1] + path[i + 1][1]) / 2
-                            if (mouse_pos - pygame.Vector2(mid_x, mid_y)).length() <= 10:
-                                waypoints.insert(i + 1, (mid_x, mid_y))
-                                break
+                        build_enemy_path()
+                        playing = True
+                else:
+                    playing = False
+                    enemy = None
+                continue
+
+            if playing:
+                continue
+
+            if clicking_midpoint:
+                save_state()
+                waypoints.append(list(mouse_pos))
+                clicking_midpoint = False
+                continue
+
+            for i, mp in enumerate(midpoints):
+                if is_point_near(mouse_pos, mp, 10):
+                    save_state()
+                    waypoints.insert(i, list(mp))
+                    break
+
+            if placing_mode == 'start':
+                save_state()
+                start_point = list(mouse_pos)
+                placing_mode = None
+            elif placing_mode == 'end':
+                save_state()
+                end_point = list(mouse_pos)
+                placing_mode = None
+            elif is_point_near(mouse_pos, start_point):
+                save_state()
+                moving_point = ('start', start_point)
+            elif is_point_near(mouse_pos, end_point):
+                save_state()
+                moving_point = ('end', end_point)
+            else:
+                for i, wp in enumerate(waypoints):
+                    if is_point_near(mouse_pos, wp):
+                        save_state()
+                        moving_point = ('waypoint', i)
+                        break
 
         elif event.type == pygame.MOUSEBUTTONUP:
-            dragging_start = False
-            dragging_end = False
-            dragging_waypoint_index = None
+            moving_point = None
 
         elif event.type == pygame.MOUSEMOTION:
-            mouse_pos = pygame.Vector2(event.pos[0] / scale_x, event.pos[1] / scale_y)
-            if dragging_start:
-                start_point = (mouse_pos[0] - mouse_offset.x, mouse_pos[1] - mouse_offset.y)
-            elif dragging_end:
-                end_point = (mouse_pos[0] - mouse_offset.x, mouse_pos[1] - mouse_offset.y)
-            elif dragging_waypoint_index is not None:
-                waypoints[dragging_waypoint_index] = (mouse_pos[0] - mouse_offset.x, mouse_pos[1] - mouse_offset.y)
-
-    pygame.display.flip()
+            if moving_point and not playing:
+                pos = event.pos
+                if moving_point[0] == 'start':
+                    start_point = list(pos)
+                elif moving_point[0] == 'end':
+                    end_point = list(pos)
+                elif moving_point[0] == 'waypoint':
+                    waypoints[moving_point[1]] = list(pos)
 
 pygame.quit()
 sys.exit()
