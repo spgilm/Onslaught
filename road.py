@@ -1,4 +1,4 @@
-# Map Generator with PyGame - Fully Commented Version
+# Map Generator with PyGame - Fully Commented Version (Fixed Undo Crash, Speed Slider Included)
 import pygame
 import sys
 import math
@@ -6,48 +6,56 @@ import math
 # Initialize PyGame
 pygame.init()
 
-# Constants for initial window size and frames per second
+# Constants
 WIDTH, HEIGHT = 800, 600
 FPS = 60
 
-# Color definitions (RGB tuples)
+# Colors
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GREEN = (0, 255, 0)
 RED = (255, 0, 0)
 YELLOW = (255, 255, 0)
 BLUE = (0, 0, 255)
+GRAY = (200, 200, 200)
 
-# Create the PyGame window with resizing support
+# Setup display
 screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption("Map Generator")
 clock = pygame.time.Clock()
 
-# State flags
+# State
 full_screen = False
 placing_mode = None
 moving_point = None
 clicking_midpoint = False
 
-# Points
+# Map Data
 start_point = None
 end_point = None
 waypoints = []
 midpoints = []
-enemy = None
-enemy_path = []
-enemy_index = 0
-enemy_speed = 2
 undo_stack = []
 redo_stack = []
 
-# UI elements
+# Enemy
+enemy = None
+enemy_path = []
+enemy_index = 0
+default_speed = 2
+enemy_speed_factor = 1.0  # from slider (1.0 = 100%)
+
+# UI
+font = pygame.font.SysFont(None, 24)
 play_button_rect = pygame.Rect(10, 10, 80, 30)
 playing = False
 
-# Font for labels
-font = pygame.font.SysFont(None, 24)
+# Slider for speed (0% to 500%)
+slider_rect = pygame.Rect(WIDTH - 60, 50, 20, 400)
+slider_knob_y = slider_rect.y + slider_rect.height // 5  # 100% default
+slider_dragging = False
 
+# Drawing helpers
 def draw_text(text, pos, color=BLACK):
     img = font.render(text, True, color)
     screen.blit(img, pos)
@@ -64,19 +72,15 @@ def midpoint(p1, p2):
     return ((p1[0] + p2[0]) // 2, (p1[1] + p2[1]) // 2)
 
 def is_point_near(pos, point, radius=15):
-    return (point and (abs(pos[0]-point[0])**2 + abs(pos[1]-point[1])**2) <= radius**2)
+    return point and ((pos[0]-point[0])**2 + (pos[1]-point[1])**2 <= radius**2)
 
 def save_state():
-    state = (
-        start_point[:] if start_point else None,
-        end_point[:] if end_point else None,
-        [wp[:] for wp in waypoints]
-    )
-    undo_stack.append(state)
+    undo_stack.append((start_point[:] if start_point else None,
+                       end_point[:] if end_point else None,
+                       [wp[:] for wp in waypoints]))
+    redo_stack.clear()
     if len(undo_stack) > 50:
         undo_stack.pop(0)
-    # Only clear redo stack when a new action is taken by the user
-    # Not during undo/redo itself
 
 def load_state(state):
     global start_point, end_point, waypoints
@@ -89,8 +93,7 @@ def build_midpoints():
     midpoints = []
     path = [start_point] + waypoints + [end_point] if start_point and end_point else []
     for i in range(len(path) - 1):
-        mp = midpoint(path[i], path[i + 1])
-        midpoints.append(mp)
+        midpoints.append(midpoint(path[i], path[i + 1]))
 
 def build_enemy_path():
     global enemy_path, enemy_index, enemy
@@ -106,36 +109,47 @@ def move_enemy():
     target = enemy_path[enemy_index + 1]
     dx, dy = target[0] - enemy[0], target[1] - enemy[1]
     dist = math.hypot(dx, dy)
-    if dist < enemy_speed:
+    speed = default_speed * enemy_speed_factor
+    if dist < speed:
         enemy = target[:]
         enemy_index += 1
     else:
-        enemy[0] += enemy_speed * dx / dist
-        enemy[1] += enemy_speed * dy / dist
+        enemy[0] += speed * dx / dist
+        enemy[1] += speed * dy / dist
 
 running = True
 while running:
     screen.fill(WHITE)
     build_midpoints()
 
+    # UI: Play Button
     pygame.draw.rect(screen, BLACK, play_button_rect, 2)
     draw_text("Stop" if playing else "Play", (play_button_rect.x + 10, play_button_rect.y + 5))
 
+    # UI: Speed Slider
+    pygame.draw.rect(screen, GRAY, slider_rect)
+    pygame.draw.rect(screen, BLACK, (slider_rect.x - 5, slider_knob_y - 5, slider_rect.width + 10, 10))
+    percent = 500 * (1 - (slider_knob_y - slider_rect.y) / slider_rect.height)
+    draw_text(f"{int(percent)}%", (slider_rect.x - 10, slider_rect.y - 25))
+    enemy_speed_factor = percent / 100.0
+
+    # Draw path lines
     path = [start_point] + waypoints + [end_point] if start_point and end_point else []
     for i in range(len(path) - 1):
         pygame.draw.line(screen, BLACK, path[i], path[i + 1], 3)
 
+    # Draw points
     if start_point:
         draw_circle_with_label(start_point, GREEN, 'S')
     if end_point:
         draw_circle_with_label(end_point, RED, 'E')
     for wp in waypoints:
         draw_flag(wp)
-
     for mp in midpoints:
         pygame.draw.circle(screen, YELLOW, mp, 10)
         draw_text('+', (mp[0]-4, mp[1]-8), BLACK)
 
+    # Draw enemy
     if playing and enemy:
         move_enemy()
         pygame.draw.circle(screen, BLUE, (int(enemy[0]), int(enemy[1])), 6)
@@ -158,29 +172,28 @@ while running:
             elif event.key == pygame.K_e:
                 placing_mode = 'end'
             elif event.key == pygame.K_z and undo_stack:
-                redo_stack.append((
-                    start_point[:] if start_point else None,
-                    end_point[:] if end_point else None,
-                    [wp[:] for wp in waypoints]
-                ))
+                redo_stack.append((start_point[:] if start_point else None,
+                                   end_point[:] if end_point else None,
+                                   [wp[:] for wp in waypoints]))
                 load_state(undo_stack.pop())
             elif event.key == pygame.K_y and redo_stack:
-                undo_stack.append((
-                    start_point[:] if start_point else None,
-                    end_point[:] if end_point else None,
-                    [wp[:] for wp in waypoints]
-                ))
+                undo_stack.append((start_point[:] if start_point else None,
+                                   end_point[:] if end_point else None,
+                                   [wp[:] for wp in waypoints]))
                 load_state(redo_stack.pop())
             elif event.key == pygame.K_m:
                 clicking_midpoint = True
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
+            if slider_rect.collidepoint(event.pos):
+                slider_dragging = True
+
             mouse_pos = event.pos
+
             if play_button_rect.collidepoint(mouse_pos):
-                if not playing:
-                    if start_point and end_point:
-                        build_enemy_path()
-                        playing = True
+                if not playing and start_point and end_point:
+                    build_enemy_path()
+                    playing = True
                 else:
                     playing = False
                     enemy = None
@@ -192,7 +205,6 @@ while running:
             if clicking_midpoint:
                 save_state()
                 waypoints.append(list(mouse_pos))
-                redo_stack.clear()
                 clicking_midpoint = False
                 continue
 
@@ -200,40 +212,38 @@ while running:
                 if is_point_near(mouse_pos, mp, 10):
                     save_state()
                     waypoints.insert(i, list(mp))
-                    redo_stack.clear()
                     break
 
             if placing_mode == 'start':
                 save_state()
                 start_point = list(mouse_pos)
-                redo_stack.clear()
                 placing_mode = None
             elif placing_mode == 'end':
                 save_state()
                 end_point = list(mouse_pos)
-                redo_stack.clear()
                 placing_mode = None
             elif is_point_near(mouse_pos, start_point):
                 save_state()
-                redo_stack.clear()
                 moving_point = ('start', start_point)
             elif is_point_near(mouse_pos, end_point):
                 save_state()
-                redo_stack.clear()
                 moving_point = ('end', end_point)
             else:
                 for i, wp in enumerate(waypoints):
                     if is_point_near(mouse_pos, wp):
                         save_state()
-                        redo_stack.clear()
                         moving_point = ('waypoint', i)
                         break
 
         elif event.type == pygame.MOUSEBUTTONUP:
+            slider_dragging = False
             moving_point = None
 
         elif event.type == pygame.MOUSEMOTION:
-            if moving_point and not playing:
+            if slider_dragging:
+                y = max(slider_rect.y, min(slider_rect.y + slider_rect.height, event.pos[1]))
+                slider_knob_y = y
+            elif moving_point and not playing:
                 pos = event.pos
                 if moving_point[0] == 'start':
                     start_point = list(pos)
