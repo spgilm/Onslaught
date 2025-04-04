@@ -10,6 +10,7 @@ ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 1)
 
 # Screen setup
 WIDTH, HEIGHT = 800, 600
+is_fullscreen = False  # Track fullscreen state
 screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)  # Create a resizable window
 pygame.display.set_caption("Map Editor - Press S or E, then Click")  # Set window title
 
@@ -60,6 +61,13 @@ while running:
             elif event.key == pygame.K_e:
                 mode = 'end'  # Switch to end point mode
                 print("Mode: Place End Point")
+            elif event.key == pygame.K_F11:
+                # Toggle fullscreen mode when F11 is pressed
+                is_fullscreen = not is_fullscreen
+                if is_fullscreen:
+                    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)  # Enter fullscreen
+                else:
+                    screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)  # Exit fullscreen
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if mode == 'start':
