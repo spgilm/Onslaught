@@ -75,7 +75,8 @@ def save_state():
     undo_stack.append(state)
     if len(undo_stack) > 50:
         undo_stack.pop(0)
-    redo_stack.clear()
+    # Only clear redo stack when a new action is taken by the user
+    # Not during undo/redo itself
 
 def load_state(state):
     global start_point, end_point, waypoints
@@ -157,15 +158,18 @@ while running:
             elif event.key == pygame.K_e:
                 placing_mode = 'end'
             elif event.key == pygame.K_z and undo_stack:
-                current_state = (
+                redo_stack.append((
                     start_point[:] if start_point else None,
                     end_point[:] if end_point else None,
                     [wp[:] for wp in waypoints]
-                )
-                redo_stack.append(current_state)
+                ))
                 load_state(undo_stack.pop())
             elif event.key == pygame.K_y and redo_stack:
-                save_state()
+                undo_stack.append((
+                    start_point[:] if start_point else None,
+                    end_point[:] if end_point else None,
+                    [wp[:] for wp in waypoints]
+                ))
                 load_state(redo_stack.pop())
             elif event.key == pygame.K_m:
                 clicking_midpoint = True
@@ -188,6 +192,7 @@ while running:
             if clicking_midpoint:
                 save_state()
                 waypoints.append(list(mouse_pos))
+                redo_stack.clear()
                 clicking_midpoint = False
                 continue
 
@@ -195,26 +200,32 @@ while running:
                 if is_point_near(mouse_pos, mp, 10):
                     save_state()
                     waypoints.insert(i, list(mp))
+                    redo_stack.clear()
                     break
 
             if placing_mode == 'start':
                 save_state()
                 start_point = list(mouse_pos)
+                redo_stack.clear()
                 placing_mode = None
             elif placing_mode == 'end':
                 save_state()
                 end_point = list(mouse_pos)
+                redo_stack.clear()
                 placing_mode = None
             elif is_point_near(mouse_pos, start_point):
                 save_state()
+                redo_stack.clear()
                 moving_point = ('start', start_point)
             elif is_point_near(mouse_pos, end_point):
                 save_state()
+                redo_stack.clear()
                 moving_point = ('end', end_point)
             else:
                 for i, wp in enumerate(waypoints):
                     if is_point_near(mouse_pos, wp):
                         save_state()
+                        redo_stack.clear()
                         moving_point = ('waypoint', i)
                         break
 
