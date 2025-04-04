@@ -8,75 +8,114 @@ pygame.init()
 # Enable full Windows system decorations (title bar with minimize/maximize/close buttons)
 ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 1)
 
-# Screen setup
-WIDTH, HEIGHT = 800, 600
+# Logical screen size (fixed virtual coordinate system)
+LOGICAL_WIDTH, LOGICAL_HEIGHT = 800, 600
 is_fullscreen = False  # Track fullscreen state
-screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)  # Create a resizable window
-pygame.display.set_caption("Map Editor - Press S or E, then Click")  # Set window title
+screen = pygame.display.set_mode((LOGICAL_WIDTH, LOGICAL_HEIGHT), pygame.RESIZABLE)
+pygame.display.set_caption("Map Editor - Press S or E to Place")
 
-# Colors used in the game
+# Colors
 WHITE = (255, 255, 255)
 GREEN = (0, 200, 0)
 RED = (200, 0, 0)
 BLACK = (0, 0, 0)
 
-# Font setup for displaying text on points
+# Font
 font = pygame.font.SysFont(None, 24)
 
-# State variables to store the start and end points
+# State
 start_point = None
 end_point = None
-mode = None  # Current mode: either 'start' or 'end'
+mode = None  # 'start' or 'end'
 
-# Main game loop
+dragging_start = False
+dragging_end = False
+mouse_offset = (0, 0)
+
+# Main loop
 running = True
 while running:
-    screen.fill(WHITE)  # Clear screen with white background
+    # Get physical window size and calculate scale
+    window_width, window_height = screen.get_size()
+    scale_x = window_width / LOGICAL_WIDTH
+    scale_y = window_height / LOGICAL_HEIGHT
 
-    # Draw the road if both start and end points are defined
+    # Create a surface to render the scene at logical resolution
+    surface = pygame.Surface((LOGICAL_WIDTH, LOGICAL_HEIGHT))
+    surface.fill(WHITE)
+
+    # Draw line between start and end
     if start_point and end_point:
-        pygame.draw.line(screen, BLACK, start_point, end_point, 4)  # Draw a black line between points
+        pygame.draw.line(surface, BLACK, start_point, end_point, 4)
 
-    # Draw the start point
+    # Draw start point
     if start_point:
-        pygame.draw.circle(screen, GREEN, start_point, 20)  # Green circle
-        s_text = font.render('S', True, WHITE)  # 'S' label
-        screen.blit(s_text, (start_point[0] - s_text.get_width() // 2, start_point[1] - s_text.get_height() // 2))
+        pygame.draw.circle(surface, GREEN, start_point, 12)
+        s_text = font.render('S', True, WHITE)
+        surface.blit(s_text, (start_point[0] - s_text.get_width() // 2, start_point[1] - s_text.get_height() // 2))
 
-    # Draw the end point
+    # Draw end point
     if end_point:
-        pygame.draw.circle(screen, RED, end_point, 20)  # Red circle
-        e_text = font.render('E', True, WHITE)  # 'E' label
-        screen.blit(e_text, (end_point[0] - e_text.get_width() // 2, end_point[1] - e_text.get_height() // 2))
+        pygame.draw.circle(surface, RED, end_point, 12)
+        e_text = font.render('E', True, WHITE)
+        surface.blit(e_text, (end_point[0] - e_text.get_width() // 2, end_point[1] - e_text.get_height() // 2))
 
-    # Event handling loop
+    # Display instructions
+    instructions = "[S]et Start | [E]nd Point | Drag points to move | F11 Fullscreen"
+    text_surface = font.render(instructions, True, BLACK)
+    surface.blit(text_surface, ((LOGICAL_WIDTH - text_surface.get_width()) // 2, LOGICAL_HEIGHT - 30))
+
+    # Scale and blit to the main screen
+    scaled_surface = pygame.transform.smoothscale(surface, (window_width, window_height))
+    screen.blit(scaled_surface, (0, 0))
+
+    # Event handling
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            running = False  # Exit the game
+            running = False
 
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_s:
-                mode = 'start'  # Switch to start point mode
-                print("Mode: Place Start Point")
+                mode = 'start'
             elif event.key == pygame.K_e:
-                mode = 'end'  # Switch to end point mode
-                print("Mode: Place End Point")
+                mode = 'end'
             elif event.key == pygame.K_F11:
-                # Toggle fullscreen mode when F11 is pressed
                 is_fullscreen = not is_fullscreen
                 if is_fullscreen:
-                    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)  # Enter fullscreen
+                    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
                 else:
-                    screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)  # Exit fullscreen
+                    screen = pygame.display.set_mode((LOGICAL_WIDTH, LOGICAL_HEIGHT), pygame.RESIZABLE)
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
+            # Convert from physical to logical coordinates
+            mouse_pos = pygame.Vector2(event.pos[0] / scale_x, event.pos[1] / scale_y)
+
             if mode == 'start':
-                start_point = event.pos  # Set start point at mouse click position
+                start_point = mouse_pos
+                mode = None
             elif mode == 'end':
-                end_point = event.pos  # Set end point at mouse click position
+                end_point = mouse_pos
+                mode = None
+            else:
+                if start_point and (pygame.Vector2(start_point) - mouse_pos).length() <= 20:
+                    dragging_start = True
+                    mouse_offset = mouse_pos - pygame.Vector2(start_point)
+                elif end_point and (pygame.Vector2(end_point) - mouse_pos).length() <= 20:
+                    dragging_end = True
+                    mouse_offset = mouse_pos - pygame.Vector2(end_point)
 
-    pygame.display.flip()  # Update the display
+        elif event.type == pygame.MOUSEBUTTONUP:
+            dragging_start = False
+            dragging_end = False
 
-# Quit PyGame and exit the program
+        elif event.type == pygame.MOUSEMOTION:
+            mouse_pos = pygame.Vector2(event.pos[0] / scale_x, event.pos[1] / scale_y)
+            if dragging_start:
+                start_point = (mouse_pos[0] - mouse_offset.x, mouse_pos[1] - mouse_offset.y)
+            elif dragging_end:
+                end_point = (mouse_pos[0] - mouse_offset.x, mouse_pos[1] - mouse_offset.y)
+
+    pygame.display.flip()
+
 pygame.quit()
 sys.exit()
