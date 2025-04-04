@@ -1,4 +1,4 @@
-# Map Generator with PyGame - Fully Commented Version (Fixed Undo Crash, Speed Slider Included)
+# Map Generator with PyGame - Fully Commented Version (Fixed Undo Crash, Speed Slider 0%–1000% with 1% Steps)
 import pygame
 import sys
 import math
@@ -50,9 +50,9 @@ font = pygame.font.SysFont(None, 24)
 play_button_rect = pygame.Rect(10, 10, 80, 30)
 playing = False
 
-# Slider for speed (0% to 500%)
+# Slider for speed (0% to 1000%)
 slider_rect = pygame.Rect(WIDTH - 60, 50, 20, 400)
-slider_knob_y = slider_rect.y + slider_rect.height // 5  # 100% default
+slider_knob_y = slider_rect.y + int(slider_rect.height * 0.9 + 0.5)  # 100% start for 1000% scale
 slider_dragging = False
 
 # Drawing helpers
@@ -129,8 +129,8 @@ while running:
     # UI: Speed Slider
     pygame.draw.rect(screen, GRAY, slider_rect)
     pygame.draw.rect(screen, BLACK, (slider_rect.x - 5, slider_knob_y - 5, slider_rect.width + 10, 10))
-    percent = 500 * (1 - (slider_knob_y - slider_rect.y) / slider_rect.height)
-    draw_text(f"{int(percent)}%", (slider_rect.x - 10, slider_rect.y - 25))
+    percent = int(round(1000 * (1 - (slider_knob_y - slider_rect.y) / slider_rect.height)))
+    draw_text(f"{percent}%", (slider_rect.x - 10, slider_rect.y - 25))
     enemy_speed_factor = percent / 100.0
 
     # Draw path lines
