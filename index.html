@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Onslaught 2 Web Remake - Starter</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: #111;
+        color: #eee;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        min-height: 100vh;
+      }
+      header {
+        padding: 1rem;
+        text-align: center;
+      }
+      #game-root {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+      }
+      canvas {
+        image-rendering: pixelated;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Onslaught 2 – Web Remake (Starter)</h1>
+      <p>Phaser 3 + TypeScript + Vite</p>
+    </header>
+    <div id="game-root"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
