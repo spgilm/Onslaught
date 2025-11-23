@@ -95,11 +95,9 @@ export class GameScene extends Phaser.Scene {
     this.add.text(
       16,
       40,
-      'Click on empty tiles (not on the path) to place towers.
-' +
-        'Use the tower bar at the bottom to select tower type.
-' +
-        'Press "Start Wave" to send the next wave.',
+      `Click on empty tiles (not on the path) to place towers.\n` +
+        `Use the tower bar at the bottom to select tower type.\n` +
+        `Press "Start Wave" to send the next wave.`,
       {
         fontSize: '14px',
         color: '#cccccc',
