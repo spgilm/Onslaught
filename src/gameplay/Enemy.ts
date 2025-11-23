@@ -1,11 +1,12 @@
 // src/gameplay/Enemy.ts
 // Basic enemy entity that moves along a predefined path.
-// This is intentionally simple so you can evolve it as you rebuild Onslaught 2.
+// Extended with a simple reward value for economy purposes.
 import Phaser from 'phaser';
 
 export interface EnemyConfig {
   maxHp: number;
-  speed: number; // pixels per second
+  speed: number;   // pixels per second
+  reward: number;  // money granted when killed
 }
 
 export class Enemy {
@@ -13,6 +14,7 @@ export class Enemy {
   public hp: number;
   public maxHp: number;
   public speed: number;
+  public reward: number;
 
   private path: Phaser.Math.Vector2[];
   private pathProgress = 0; // 0..1
@@ -27,6 +29,7 @@ export class Enemy {
     this.maxHp = config.maxHp;
     this.hp = config.maxHp;
     this.speed = config.speed;
+    this.reward = config.reward;
 
     // Placeholder red circle – swap this for a sprite later.
     this.sprite = scene.add.circle(this.path[0].x, this.path[0].y, 15, 0xe74c3c);

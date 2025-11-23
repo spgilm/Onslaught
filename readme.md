@@ -123,3 +123,12 @@ When you’re ready, I can help you:
 - Design a clean folder structure for towers/enemies/waves.
 - Port specific formulas/behaviors from the decompiled ActionScript into TypeScript.
 - Add UI (money, lives, score, wave progress, etc.).
+
+### New in this version (v4)
+
+- Extended `Enemy` with a `reward` value so kills can grant money.
+- Extended `WaveManager` to accept callbacks (`onEnemyLeak`, `onEnemyKilled`) and report events to the scene.
+- Updated `GameScene` to add:
+  - Simple grid-based tower placement by clicking on the playfield (excluding the path).
+  - Economy (money) and lives tracking, with HUD text.
+  - Game over detection when lives reach zero.

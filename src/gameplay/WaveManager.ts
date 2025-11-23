@@ -1,5 +1,6 @@
 // src/gameplay/WaveManager.ts
-// Spawns enemies over time according to simple wave definitions.
+// Spawns enemies over time according to simple wave definitions
+// and reports leaks/kills back to the game via callbacks.
 import Phaser from 'phaser';
 import { Enemy, EnemyConfig } from './Enemy';
 
@@ -7,6 +8,11 @@ export interface WaveDefinition {
   count: number;
   spawnInterval: number; // seconds between spawns
   enemyConfig: EnemyConfig;
+}
+
+export interface WaveCallbacks {
+  onEnemyLeak?: () => void;
+  onEnemyKilled?: (enemy: Enemy) => void;
 }
 
 export class WaveManager {
@@ -17,18 +23,24 @@ export class WaveManager {
   private enemiesSpawnedThisWave = 0;
   private isWaveActive = false;
 
+  private callbacks: WaveCallbacks;
+
   constructor(
     private scene: Phaser.Scene,
-    private path: Phaser.Math.Vector2[]
+    private path: Phaser.Math.Vector2[],
+    callbacks: WaveCallbacks = {}
   ) {
+    this.callbacks = callbacks;
+
     // For now, define a single example wave.
     // Later, you can load this from JSON or generate procedurally.
     this.waves.push({
-      count: 10,
-      spawnInterval: 0.8,
+      count: 15,
+      spawnInterval: 0.7,
       enemyConfig: {
-        maxHp: 10,
+        maxHp: 12,
         speed: 80,
+        reward: 5,
       },
     });
   }
@@ -45,7 +57,11 @@ export class WaveManager {
   }
 
   update(dt: number): void {
-    if (!this.isWaveActive) return;
+    if (!this.isWaveActive) {
+      // Still update leftover enemies from the last wave.
+      this.updateEnemies(dt);
+      return;
+    }
 
     const wave = this.waves[this.currentWaveIndex];
     this.spawnTimer -= dt;
@@ -56,18 +72,7 @@ export class WaveManager {
       this.spawnTimer = wave.spawnInterval;
     }
 
-    // Update all enemies.
-    this.enemies.forEach(e => e.update(dt));
-
-    // Remove enemies that are dead or have reached the end.
-    this.enemies = this.enemies.filter(e => {
-      if (e.hasReachedEnd() || e.isDead()) {
-        // TODO: if reached end, decrement player lives here.
-        e.destroy();
-        return false;
-      }
-      return true;
-    });
+    this.updateEnemies(dt);
 
     // Wave finished?
     if (
@@ -88,5 +93,28 @@ export class WaveManager {
   private spawnEnemy(config: EnemyConfig): void {
     const enemy = new Enemy(this.scene, this.path, config);
     this.enemies.push(enemy);
+  }
+
+  private updateEnemies(dt: number): void {
+    this.enemies.forEach(e => e.update(dt));
+
+    // Remove enemies that are dead or have reached the end.
+    this.enemies = this.enemies.filter(e => {
+      if (e.hasReachedEnd()) {
+        if (this.callbacks.onEnemyLeak) {
+          this.callbacks.onEnemyLeak();
+        }
+        e.destroy();
+        return false;
+      }
+      if (e.isDead()) {
+        if (this.callbacks.onEnemyKilled) {
+          this.callbacks.onEnemyKilled(e);
+        }
+        e.destroy();
+        return false;
+      }
+      return true;
+    });
   }
 }
