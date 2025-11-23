@@ -2,13 +2,14 @@ import Phaser from 'phaser';
 import { WaveManager } from '../gameplay/WaveManager';
 import { TowerManager } from '../gameplay/TowerManager';
 import { Enemy } from '../gameplay/Enemy';
+import { TOWER_TYPES, TowerTypeId, getTowerType } from '../config/towers';
 
 // Main game scene.
 // Now includes:
 // - Simple grid-based tower placement (click to place towers on valid tiles)
-// - Money and lives system
-// - Towers auto-target enemies; killing enemies grants money
-// - Enemies reaching the end remove lives; when lives hit 0, game over
+// - Money and lives system with HUD
+// - Multiple waves and a "Start Wave" button
+// - Tower type selection UI bar
 export class GameScene extends Phaser.Scene {
   private pathPoints: Phaser.Math.Vector2[] = [];
   private waveManager!: WaveManager;
@@ -24,12 +25,17 @@ export class GameScene extends Phaser.Scene {
   // Economy / player state
   private money = 100;
   private lives = 20;
-  private towerCost = 20;
   private isGameOver = false;
 
   // UI
   private hudText!: Phaser.GameObjects.Text;
   private gameOverText?: Phaser.GameObjects.Text;
+  private startWaveButton?: Phaser.GameObjects.Rectangle;
+  private startWaveLabel?: Phaser.GameObjects.Text;
+
+  // Tower selection
+  private selectedTowerTypeId: TowerTypeId = 'gun';
+  private towerButtons: { id: TowerTypeId; rect: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text }[] = [];
 
   constructor() {
     super('GameScene');
@@ -60,10 +66,10 @@ export class GameScene extends Phaser.Scene {
       new Phaser.Math.Vector2(width - 50, height * 0.3),
     ];
 
-    // Precompute which tiles are "blocked" by the path so we can't place towers on it.
+    // Compute blocked tiles for path.
     this.markPathBlockedTiles();
 
-    // Draw path.
+    // Draw path and grid.
     const graphics = this.add.graphics();
     graphics.lineStyle(8, 0x444444, 1);
     graphics.beginPath();
@@ -72,11 +78,9 @@ export class GameScene extends Phaser.Scene {
       graphics.lineTo(this.pathPoints[i].x, this.pathPoints[i].y);
     }
     graphics.strokePath();
-
-    // Draw a faint grid overlay (optional but helpful).
     this.drawGridOverlay();
 
-    // UI text
+    // HUD text
     this.hudText = this.add.text(
       16,
       16,
@@ -93,7 +97,9 @@ export class GameScene extends Phaser.Scene {
       40,
       'Click on empty tiles (not on the path) to place towers.
 ' +
-        `Tower cost: ${this.towerCost}`,
+        'Use the tower bar at the bottom to select tower type.
+' +
+        'Press "Start Wave" to send the next wave.',
       {
         fontSize: '14px',
         color: '#cccccc',
@@ -104,18 +110,22 @@ export class GameScene extends Phaser.Scene {
     this.waveManager = new WaveManager(this, this.pathPoints, {
       onEnemyLeak: () => this.handleEnemyLeak(),
       onEnemyKilled: (enemy: Enemy) => this.handleEnemyKilled(enemy),
+      onWaveEnded: (waveIndex: number) => this.handleWaveEnded(waveIndex),
     });
     this.towerManager = new TowerManager(this);
 
-    // Add one starter tower near the path so something happens immediately.
+    // Add one free starter tower near the path.
     const starterX = width * 0.5 + 80;
     const starterY = height * 0.55;
     this.addTowerAtWorldPosition(starterX, starterY, true);
 
-    // Start the first wave.
-    this.waveManager.startNextWave();
+    // Create tower selection bar.
+    this.createTowerSelectionBar();
 
-    // Enable input for tower placement.
+    // Create start wave button.
+    this.createStartWaveButton();
+
+    // Input handler for tower placement.
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       this.handlePointerDown(pointer);
     });
@@ -132,8 +142,6 @@ export class GameScene extends Phaser.Scene {
   // --- Path / grid helpers -------------------------------------------------
 
   private markPathBlockedTiles(): void {
-    // For each tile center, check distance to the path polyline.
-    // If it's within a threshold, mark it as blocked.
     const threshold = this.tileSize * 0.6;
 
     for (let row = 0; row < this.rows; row++) {
@@ -206,10 +214,20 @@ export class GameScene extends Phaser.Scene {
   private handlePointerDown(pointer: Phaser.Input.Pointer): void {
     if (this.isGameOver) return;
 
+    // Check if clicked on any tower button first.
+    const hitButton = this.tryHandleTowerButtonClick(pointer);
+    if (hitButton) {
+      return;
+    }
+
+    // Check if clicked on start wave button.
+    if (this.tryHandleStartWaveClick(pointer)) {
+      return;
+    }
+
     const worldX = pointer.worldX;
     const worldY = pointer.worldY;
 
-    // Ignore clicks outside the canvas.
     const { width, height } = this.scale;
     if (worldX < 0 || worldX >= width || worldY < 0 || worldY >= height) {
       return;
@@ -218,13 +236,12 @@ export class GameScene extends Phaser.Scene {
     const col = Math.floor(worldX / this.tileSize);
     const row = Math.floor(worldY / this.tileSize);
 
-    // Starter tower uses a free placement (already placed). Normal towers cost money.
     if (!this.canPlaceTower(row, col)) {
       return;
     }
 
-    if (this.money < this.towerCost) {
-      // Not enough money – could add a "Not enough money" flash here later.
+    const towerType = getTowerType(this.selectedTowerTypeId);
+    if (this.money < towerType.cost) {
       return;
     }
 
@@ -232,13 +249,15 @@ export class GameScene extends Phaser.Scene {
     const centerY = row * this.tileSize + this.tileSize / 2;
 
     this.towerManager.addTower(centerX, centerY, {
-      range: 200,
-      fireRate: 1.5,
-      damage: 3,
+      range: towerType.range,
+      fireRate: towerType.fireRate,
+      damage: towerType.damage,
+      color: this.getTowerColor(towerType.id),
+      name: towerType.name,
     });
     this.occupiedTiles[row][col] = true;
 
-    this.money -= this.towerCost;
+    this.money -= towerType.cost;
     this.updateHud();
   }
 
@@ -262,10 +281,13 @@ export class GameScene extends Phaser.Scene {
     const centerX = col * this.tileSize + this.tileSize / 2;
     const centerY = row * this.tileSize + this.tileSize / 2;
 
+    const baseType = getTowerType('gun');
     this.towerManager.addTower(centerX, centerY, {
-      range: 200,
-      fireRate: 1.5,
-      damage: 3,
+      range: baseType.range,
+      fireRate: baseType.fireRate,
+      damage: baseType.damage,
+      color: this.getTowerColor('gun'),
+      name: baseType.name,
     });
     this.occupiedTiles[row][col] = true;
   }
@@ -287,8 +309,18 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private handleWaveEnded(waveIndex: number): void {
+    // Could show "Wave X cleared!" here later.
+    this.updateHud();
+  }
+
   private updateHud(): void {
-    this.hudText.setText(`Money: ${this.money}   Lives: ${this.lives}`);
+    const waveIndex = this.waveManager.getCurrentWaveIndex();
+    const waveText = this.waveManager.hasMoreWaves()
+      ? `Wave: ${waveIndex + 1}`
+      : `Wave: ${waveIndex} (no more waves)`;
+
+    this.hudText.setText(`Money: ${this.money}   Lives: ${this.lives}   ${waveText}`);
   }
 
   private showGameOver(): void {
@@ -302,5 +334,115 @@ export class GameScene extends Phaser.Scene {
         color: '#ff5555',
       }
     ).setOrigin(0.5);
+  }
+
+  // --- Tower selection bar -------------------------------------------------
+
+  private createTowerSelectionBar(): void {
+    const { width, height } = this.scale;
+    const barHeight = 60;
+    const margin = 10;
+    const totalWidth = Math.min(width - margin * 2, TOWER_TYPES.length * 140);
+    const startX = (width - totalWidth) / 2;
+    const y = height - barHeight - margin;
+
+    TOWER_TYPES.forEach((type, index) => {
+      const x = startX + index * 140 + 70;
+
+      const isSelected = type.id === this.selectedTowerTypeId;
+      const color = this.getTowerColor(type.id);
+      const rect = this.add.rectangle(x, y + barHeight / 2, 130, barHeight, 0x111111);
+      rect.setStrokeStyle(isSelected ? 3 : 1, color);
+      rect.setData('towerTypeId', type.id);
+
+      const label = this.add.text(
+        x,
+        y + barHeight / 2,
+        `${type.name}\n$${type.cost}`,
+        {
+          fontSize: '14px',
+          color: '#ffffff',
+          align: 'center',
+        }
+      ).setOrigin(0.5);
+
+      this.towerButtons.push({ id: type.id, rect, label });
+    });
+  }
+
+  private tryHandleTowerButtonClick(pointer: Phaser.Input.Pointer): boolean {
+    const x = pointer.x;
+    const y = pointer.y;
+
+    let clicked = false;
+    this.towerButtons.forEach(btn => {
+      const rect = btn.rect.getBounds();
+      if (rect.contains(x, y)) {
+        this.selectedTowerTypeId = btn.id;
+        clicked = true;
+      }
+    });
+
+    if (clicked) {
+      // Update visual selection.
+      this.towerButtons.forEach(btn => {
+        const color = this.getTowerColor(btn.id);
+        const isSelected = btn.id === this.selectedTowerTypeId;
+        btn.rect.setStrokeStyle(isSelected ? 3 : 1, color);
+      });
+    }
+
+    return clicked;
+  }
+
+  private getTowerColor(id: TowerTypeId): number {
+    switch (id) {
+      case 'gun':
+        return 0x2ecc71;
+      case 'slow':
+        return 0x3498db;
+      case 'splash':
+        return 0xe67e22;
+      default:
+        return 0x2ecc71;
+    }
+  }
+
+  // --- Start wave button ---------------------------------------------------
+
+  private createStartWaveButton(): void {
+    const { width } = this.scale;
+    const x = width - 120;
+    const y = 80;
+    const w = 110;
+    const h = 32;
+
+    const rect = this.add.rectangle(x, y, w, h, 0x222222);
+    rect.setStrokeStyle(2, 0xffffff);
+    const label = this.add.text(
+      x,
+      y,
+      'Start Wave',
+      {
+        fontSize: '14px',
+        color: '#ffffff',
+      }
+    ).setOrigin(0.5);
+
+    this.startWaveButton = rect;
+    this.startWaveLabel = label;
+  }
+
+  private tryHandleStartWaveClick(pointer: Phaser.Input.Pointer): boolean {
+    if (!this.startWaveButton) return false;
+    const rect = this.startWaveButton.getBounds();
+    if (!rect.contains(pointer.x, pointer.y)) return false;
+
+    if (!this.waveManager.isRunningWave() && this.waveManager.hasMoreWaves()) {
+      this.waveManager.startNextWave();
+      this.updateHud();
+    }
+
+    return true;
   }
 }

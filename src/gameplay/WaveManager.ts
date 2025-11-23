@@ -13,6 +13,7 @@ export interface WaveDefinition {
 export interface WaveCallbacks {
   onEnemyLeak?: () => void;
   onEnemyKilled?: (enemy: Enemy) => void;
+  onWaveEnded?: (waveIndex: number) => void;
 }
 
 export class WaveManager {
@@ -32,22 +33,38 @@ export class WaveManager {
   ) {
     this.callbacks = callbacks;
 
-    // For now, define a single example wave.
-    // Later, you can load this from JSON or generate procedurally.
-    this.waves.push({
-      count: 15,
-      spawnInterval: 0.7,
-      enemyConfig: {
-        maxHp: 12,
-        speed: 80,
-        reward: 5,
+    // Define a small set of placeholder waves.
+    this.waves = [
+      {
+        count: 10,
+        spawnInterval: 0.8,
+        enemyConfig: { maxHp: 8, speed: 70, reward: 4 },
       },
-    });
+      {
+        count: 12,
+        spawnInterval: 0.7,
+        enemyConfig: { maxHp: 12, speed: 80, reward: 5 },
+      },
+      {
+        count: 14,
+        spawnInterval: 0.65,
+        enemyConfig: { maxHp: 16, speed: 85, reward: 6 },
+      },
+      {
+        count: 16,
+        spawnInterval: 0.6,
+        enemyConfig: { maxHp: 20, speed: 90, reward: 7 },
+      },
+      {
+        count: 18,
+        spawnInterval: 0.55,
+        enemyConfig: { maxHp: 24, speed: 95, reward: 8 },
+      },
+    ];
   }
 
   startNextWave(): void {
     if (this.currentWaveIndex >= this.waves.length) {
-      // TODO: loop waves or generate new ones.
       return;
     }
 
@@ -57,9 +74,10 @@ export class WaveManager {
   }
 
   update(dt: number): void {
+    // Always update existing enemies.
+    this.updateEnemies(dt);
+
     if (!this.isWaveActive) {
-      // Still update leftover enemies from the last wave.
-      this.updateEnemies(dt);
       return;
     }
 
@@ -72,22 +90,34 @@ export class WaveManager {
       this.spawnTimer = wave.spawnInterval;
     }
 
-    this.updateEnemies(dt);
-
-    // Wave finished?
+    // Wave finished when we've spawned them all and none remain.
     if (
       this.enemiesSpawnedThisWave >= wave.count &&
       this.enemies.length === 0
     ) {
       this.isWaveActive = false;
+      const endedWave = this.currentWaveIndex;
       this.currentWaveIndex++;
-      // Later: you might auto-start the next wave after a delay
-      // or wait for a "Start Wave" button.
+      if (this.callbacks.onWaveEnded) {
+        this.callbacks.onWaveEnded(endedWave);
+      }
     }
   }
 
   getEnemies(): Enemy[] {
     return this.enemies;
+  }
+
+  getCurrentWaveIndex(): number {
+    return this.currentWaveIndex;
+  }
+
+  isRunningWave(): boolean {
+    return this.isWaveActive;
+  }
+
+  hasMoreWaves(): boolean {
+    return this.currentWaveIndex < this.waves.length;
   }
 
   private spawnEnemy(config: EnemyConfig): void {
@@ -98,7 +128,6 @@ export class WaveManager {
   private updateEnemies(dt: number): void {
     this.enemies.forEach(e => e.update(dt));
 
-    // Remove enemies that are dead or have reached the end.
     this.enemies = this.enemies.filter(e => {
       if (e.hasReachedEnd()) {
         if (this.callbacks.onEnemyLeak) {

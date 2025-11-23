@@ -8,6 +8,8 @@ export interface TowerConfig {
   range: number;      // pixels
   fireRate: number;   // shots per second
   damage: number;     // damage per shot
+  color?: number;     // optional color override
+  name?: string;      // optional display name
 }
 
 export class Tower {
@@ -26,13 +28,15 @@ export class Tower {
     this.config = config;
     this.fireCooldown = 1 / config.fireRate;
 
-    // Placeholder green square – later replace with a proper sprite.
-    this.sprite = scene.add.rectangle(x, y, 40, 40, 0x2ecc71);
+    const color = config.color ?? 0x2ecc71;
+
+    // Placeholder square – later replace with sprites.
+    this.sprite = scene.add.rectangle(x, y, 40, 40, color);
     this.sprite.setStrokeStyle(2, 0x000000);
 
     // Optional: draw range circle (debug)
-    const rangeCircle = scene.add.circle(x, y, config.range, 0x2ecc71, 0.08);
-    rangeCircle.setStrokeStyle(1, 0x2ecc71);
+    const rangeCircle = scene.add.circle(x, y, config.range, color, 0.08);
+    rangeCircle.setStrokeStyle(1, color);
   }
 
   update(dt: number, enemies: Enemy[]): void {

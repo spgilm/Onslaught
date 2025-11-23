@@ -132,3 +132,12 @@ When you’re ready, I can help you:
   - Simple grid-based tower placement by clicking on the playfield (excluding the path).
   - Economy (money) and lives tracking, with HUD text.
   - Game over detection when lives reach zero.
+
+### New in this version (v5)
+
+- Added `src/config/towers.ts` for defining multiple tower types (Gun, Slow, Splash) with configurable stats.
+- Extended `WaveManager` to support multiple waves, wave index tracking, and a `onWaveEnded` callback.
+- Updated `GameScene` to include:
+  - A tower selection bar at the bottom to choose tower type before placing.
+  - A "Start Wave" button to manually trigger waves.
+  - Wave number display in the HUD.
