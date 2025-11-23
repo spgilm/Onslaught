@@ -355,6 +355,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateHud(): void {
+    // waveManager may not be initialized yet during early create()
+    if (!this.waveManager) {
+      this.hudText.setText(`Money: ${this.money}   Lives: ${this.lives}`);
+      return;
+    }
+
     const waveIndex = this.waveManager.getCurrentWaveIndex();
     const waveText = this.waveManager.hasMoreWaves()
       ? `Wave: ${waveIndex + 1}`
