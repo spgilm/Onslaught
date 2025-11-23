@@ -150,3 +150,15 @@ When you’re ready, I can help you:
 - Added a simple `Combos` system that boosts tower damage when certain type pairs are placed near each other.
 - Added a 4th tower type ("Chain") in `src/config/towers.ts` and in the selection bar.
 - Implemented a basic tower upgrade system: click a tower to open a small upgrade panel and pay money to increase its level and stats.
+
+
+### New in this version (v11)
+
+- Integrated additional UI button graphics from the decompiled SWF:
+  - `btn_start_wave.png` for the Start Wave button
+  - `btn_tower_bar.png` as a background for the tower selection bar
+  - `btn_tower_panel.png` for the tower upgrade popup.
+- Updated `GameScene` to:
+  - Use these images in the UI instead of plain rectangles.
+  - Add pause (`||/▶`) and 1x/2x speed controls.
+  - Display the current game speed in the HUD.

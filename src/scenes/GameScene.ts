@@ -14,7 +14,8 @@ import { Tower } from '../gameplay/Tower';
 // - Tower type selection bar (Gun, Slow, Splash, Chain)
 // - Basic combo system applying small damage boosts when tower pairs are close
 // - Simple tower upgrade UI when clicking a tower
-// - Background image pulled from decompiled SWF resources
+// - Background image & button art pulled from decompiled SWF resources
+// - Pause and 2x speed controls
 export class GameScene extends Phaser.Scene {
   private pathPoints: Phaser.Math.Vector2[] = [];
   private waveManager!: WaveManager;
@@ -31,12 +32,16 @@ export class GameScene extends Phaser.Scene {
   private money = 100;
   private lives = 20;
   private isGameOver = false;
+  private gameSpeed = 1; // 1x, 2x, etc.
+  private isPaused = false;
 
   // UI
   private hudText!: Phaser.GameObjects.Text;
   private gameOverText?: Phaser.GameObjects.Text;
-  private startWaveButton?: Phaser.GameObjects.Rectangle;
+  private startWaveButton?: Phaser.GameObjects.Image;
   private startWaveLabel?: Phaser.GameObjects.Text;
+  private pauseButton?: Phaser.GameObjects.Text;
+  private speedButton?: Phaser.GameObjects.Text;
 
   // Tower selection
   private selectedTowerTypeId: TowerTypeId = 'gun';
@@ -44,7 +49,7 @@ export class GameScene extends Phaser.Scene {
 
   // Tower upgrades
   private selectedTower: Tower | null = null;
-  private upgradePanel?: Phaser.GameObjects.Rectangle;
+  private upgradePanel?: Phaser.GameObjects.Image;
   private upgradeText?: Phaser.GameObjects.Text;
 
   constructor() {
@@ -52,8 +57,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // Background from decompiled SWF frames (served from public/assets).
+    // Background and buttons from decompiled SWF (served from public/assets).
     this.load.image('bg-onslaught', '/assets/onslaught/bg-1.png');
+    this.load.image('btn_start_wave', '/assets/onslaught/btn_start_wave.png');
+    this.load.image('btn_tower_panel', '/assets/onslaught/btn_tower_panel.png');
+    this.load.image('btn_tower_bar', '/assets/onslaught/btn_tower_bar.png');
   }
 
   create(): void {
@@ -133,7 +141,7 @@ export class GameScene extends Phaser.Scene {
     const starterY = height * 0.55;
     this.addTowerAtWorldPosition(starterX, starterY, true);
 
-    // Start the first wave automatically so something happens right away.
+    // Start the first wave automatically so there's action right away.
     this.waveManager.startNextWave();
 
     // Create tower selection bar.
@@ -142,23 +150,29 @@ export class GameScene extends Phaser.Scene {
     // Create start wave button.
     this.createStartWaveButton();
 
+    // Create pause / speed controls.
+    this.createSpeedControls();
+
     // Input handler for tower placement & tower clicks.
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       this.handlePointerDown(pointer);
     });
 
-    this.input.on('gameobjectdown', (_pointer: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
-      const tower = (obj as any).getData && (obj as any).getData('tower');
-      if (tower) {
-        this.handleTowerClicked(tower as Tower);
+    this.input.on(
+      'gameobjectdown',
+      (_pointer: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
+        const tower = (obj as any).getData && (obj as any).getData('tower');
+        if (tower) {
+          this.handleTowerClicked(tower as Tower);
+        }
       }
-    });
+    );
   }
 
   update(time: number, delta: number): void {
-    if (this.isGameOver) return;
+    if (this.isGameOver || this.isPaused) return;
 
-    const dt = delta / 1000;
+    const dt = (delta / 1000) * this.gameSpeed;
     this.waveManager.update(dt);
     const enemies = this.waveManager.getEnemies();
 
@@ -249,6 +263,11 @@ export class GameScene extends Phaser.Scene {
 
     // Check start wave button.
     if (this.tryHandleStartWaveClick(pointer)) {
+      return;
+    }
+
+    // Check pause/speed controls.
+    if (this.tryHandleSpeedControlClick(pointer)) {
       return;
     }
 
@@ -366,7 +385,7 @@ export class GameScene extends Phaser.Scene {
       ? `Wave: ${waveIndex + 1}`
       : `Wave: ${waveIndex} (no more waves)`;
 
-    this.hudText.setText(`Money: ${this.money}   Lives: ${this.lives}   ${waveText}`);
+    this.hudText.setText(`Money: ${this.money}   Lives: ${this.lives}   ${waveText}   Speed: ${this.gameSpeed}x`);
   }
 
   private showGameOver(): void {
@@ -392,6 +411,11 @@ export class GameScene extends Phaser.Scene {
     const startX = (width - totalWidth) / 2;
     const y = height - barHeight - margin;
 
+    // Background bar image (stretched a bit).
+    const barBg = this.add.image(width / 2, y + barHeight / 2, 'btn_tower_bar');
+    barBg.setDisplaySize(totalWidth + 40, barHeight + 20);
+    barBg.setDepth(1);
+
     TOWER_TYPES.forEach((type, index) => {
       const x = startX + index * 140 + 70;
 
@@ -400,6 +424,7 @@ export class GameScene extends Phaser.Scene {
       const rect = this.add.rectangle(x, y + barHeight / 2, 130, barHeight, 0x111111);
       rect.setStrokeStyle(isSelected ? 3 : 1, color);
       rect.setData('towerTypeId', type.id);
+      rect.setDepth(2);
 
       const label = this.add.text(
         x,
@@ -411,6 +436,7 @@ export class GameScene extends Phaser.Scene {
           align: 'center',
         }
       ).setOrigin(0.5);
+      label.setDepth(3);
 
       this.towerButtons.push({ id: type.id, rect, label });
     });
@@ -459,13 +485,13 @@ export class GameScene extends Phaser.Scene {
 
   private createStartWaveButton(): void {
     const { width } = this.scale;
-    const x = width - 120;
+    const x = width - 90;
     const y = 80;
-    const w = 110;
-    const h = 32;
 
-    const rect = this.add.rectangle(x, y, w, h, 0x222222);
-    rect.setStrokeStyle(2, 0xffffff);
+    const btn = this.add.image(x, y, 'btn_start_wave');
+    btn.setDisplaySize(120, 40);
+    btn.setInteractive({ useHandCursor: true });
+
     const label = this.add.text(
       x,
       y,
@@ -476,7 +502,7 @@ export class GameScene extends Phaser.Scene {
       }
     ).setOrigin(0.5);
 
-    this.startWaveButton = rect;
+    this.startWaveButton = btn;
     this.startWaveLabel = label;
   }
 
@@ -491,6 +517,59 @@ export class GameScene extends Phaser.Scene {
     }
 
     return true;
+  }
+
+  // --- Pause / speed controls ---------------------------------------------
+
+  private createSpeedControls(): void {
+    const { width } = this.scale;
+    const baseX = width - 90;
+    const baseY = 130;
+
+    const pause = this.add.text(
+      baseX - 40,
+      baseY,
+      '||',
+      { fontSize: '18px', color: '#ffffff' }
+    ).setOrigin(0.5);
+    pause.setInteractive({ useHandCursor: true });
+
+    const speed = this.add.text(
+      baseX + 40,
+      baseY,
+      '2x',
+      { fontSize: '18px', color: '#ffffff' }
+    ).setOrigin(0.5);
+    speed.setInteractive({ useHandCursor: true });
+
+    this.pauseButton = pause;
+    this.speedButton = speed;
+  }
+
+  private tryHandleSpeedControlClick(pointer: Phaser.Input.Pointer): boolean {
+    let clicked = false;
+
+    if (this.pauseButton) {
+      const r = this.pauseButton.getBounds();
+      if (r.contains(pointer.x, pointer.y)) {
+        this.isPaused = !this.isPaused;
+        this.pauseButton.setText(this.isPaused ? '▶' : '||');
+        clicked = true;
+      }
+    }
+
+    if (this.speedButton) {
+      const r = this.speedButton.getBounds();
+      if (r.contains(pointer.x, pointer.y)) {
+        // Toggle between 1x and 2x for now.
+        this.gameSpeed = this.gameSpeed === 1 ? 2 : 1;
+        this.speedButton.setText(this.gameSpeed === 1 ? '2x' : '1x');
+        this.updateHud();
+        clicked = true;
+      }
+    }
+
+    return clicked;
   }
 
   // --- Tower upgrade handling ---------------------------------------------
@@ -511,14 +590,18 @@ export class GameScene extends Phaser.Scene {
       this.upgradeText = undefined;
     }
 
-    const x = tower.x + 60;
+    const x = tower.x + 70;
     const y = tower.y - 20;
     const w = 140;
     const h = 70;
 
-    const rect = this.add.rectangle(x, y, w, h, 0x000000, 0.8);
-    rect.setStrokeStyle(2, 0xffffff);
-    rect.setDepth(20);
+    const img = this.add.image(x, y, 'btn_tower_panel');
+    img.setDisplaySize(w, h);
+    img.setDepth(20);
+    img.setInteractive({ useHandCursor: true });
+    img.on('pointerdown', () => {
+      this.tryUpgradeSelectedTower();
+    });
 
     const upgradeCost = this.getUpgradeCost(tower);
     const text = this.add.text(
@@ -535,12 +618,7 @@ export class GameScene extends Phaser.Scene {
     ).setOrigin(0.5);
     text.setDepth(21);
 
-    rect.setInteractive();
-    rect.on('pointerdown', () => {
-      this.tryUpgradeSelectedTower();
-    });
-
-    this.upgradePanel = rect;
+    this.upgradePanel = img;
     this.upgradeText = text;
   }
 
