@@ -34,10 +34,14 @@ export const COMBOS: ComboDefinition[] = [
 ];
 
 export function applyCombos(towers: Tower[]): void {
-  // Reset multipliers before applying combos each frame.
-  towers.forEach(t => {
-    t.damageMultiplier = 1.0 * Math.pow(1.25, t.level - 1); // maintain upgrade scaling
-  });
+// Reset multipliers before applying combos/modifiers each frame.
+towers.forEach(t => {
+  const damageLevelBonus = Math.pow(1.25, t.level - 1);
+  const rangeLevelBonus = Math.pow(1.08, t.level - 1);
+  t.damageMultiplier = damageLevelBonus;
+  t.rangeMultiplier = rangeLevelBonus;
+  t.fireRateMultiplier = 1.0;
+});
 
   for (const combo of COMBOS) {
     const [typeA, typeB] = combo.types;
@@ -58,6 +62,58 @@ export function applyCombos(towers: Tower[]): void {
           a.damageMultiplier *= 1 + combo.damageBonus;
           b.damageMultiplier *= 1 + combo.damageBonus;
         }
+      }
+    }
+  }
+
+  // After processing basic pair-combos, apply modifier turret auras.
+  // These are inspired by the official Onslaught 2 modifier turrets.
+  for (const source of towers) {
+    const typeId = source.config.towerTypeId;
+    const isModifier = typeId === 'modDamage' ||
+      typeId === 'modRange' ||
+      typeId === 'modFire' ||
+      typeId === 'modXDamage' ||
+      typeId === 'modXRange';
+
+    if (!isModifier) continue;
+
+    const auraRadius = source.getEffectiveRange();
+
+    for (const target of towers) {
+      if (target === source) continue;
+      if (target.config.behavior === 'modifier') continue;
+
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > auraRadius) continue;
+
+      // Apply effects based on modifier type.
+      switch (typeId) {
+        case 'modDamage':
+          // Plain damage booster: +40% damage.
+          target.damageMultiplier *= 1.4;
+          break;
+        case 'modRange':
+          // Plain range booster: roughly +50% range.
+          target.rangeMultiplier *= 1.5;
+          break;
+        case 'modFire':
+          // Rate-of-fire booster: approx +120% rate (2.2x shots/sec).
+          target.fireRateMultiplier *= 2.2;
+          break;
+        case 'modXDamage':
+          // Exchange turret: +100% damage, -30% range, -30% fire rate.
+          target.damageMultiplier *= 2.0;
+          target.rangeMultiplier *= 0.7;
+          target.fireRateMultiplier *= 0.7;
+          break;
+        case 'modXRange':
+          // Exchange turret: strong range boost but slower rate of fire.
+          target.rangeMultiplier *= 1.5;
+          target.fireRateMultiplier *= 0.75;
+          break;
       }
     }
   }

@@ -1,9 +1,18 @@
 // src/config/towers.ts
 // Central place to define tower types and their stats / behavior.
 // These are placeholder values that you can later tune to match Onslaught 2.
-export type TowerTypeId = 'gun' | 'slow' | 'splash' | 'chain';
+export type TowerTypeId =
+  | 'gun'
+  | 'slow'
+  | 'splash'
+  | 'chain'
+  | 'modDamage'
+  | 'modRange'
+  | 'modFire'
+  | 'modXDamage'
+  | 'modXRange';
 
-export type TowerBehavior = 'single' | 'slow' | 'splash' | 'chain';
+export type TowerBehavior = 'single' | 'slow' | 'splash' | 'chain' | 'modifier';
 
 export interface TowerType {
   id: TowerTypeId;

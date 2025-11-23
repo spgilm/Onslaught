@@ -27,6 +27,7 @@ export class Tower {
   public level = 1;
   public damageMultiplier = 1.0;
   public rangeMultiplier = 1.0;
+  public fireRateMultiplier = 1.0;
 
   private fireCooldown: number;
   private fireTimer = 0;
@@ -55,6 +56,11 @@ export class Tower {
   }
 
   update(dt: number, enemies: Enemy[]): void {
+    // Modifier towers do not fire; they just provide aura buffs handled elsewhere.
+    if (this.config.behavior === 'modifier') {
+      return;
+    }
+
     this.fireTimer -= dt;
     if (this.fireTimer > 0) return;
 
@@ -62,7 +68,9 @@ export class Tower {
     if (!target) return;
 
     this.fireAt(target, enemies);
-    this.fireTimer = this.fireCooldown;
+    // Apply fire-rate multiplier to cooldown so modifiers can speed up towers.
+    const effectiveCooldown = this.fireCooldown / Math.max(this.fireRateMultiplier, 0.1);
+    this.fireTimer = effectiveCooldown;
   }
 
   getEffectiveRange(): number {
@@ -74,10 +82,9 @@ export class Tower {
   }
 
   upgrade(): void {
+    // Increase the tower's level; base damage/range scaling per level
+    // is applied inside the combo/modifier system so it can be recomputed each frame.
     this.level += 1;
-    // Simple upgrade logic: slightly increase damage & range.
-    this.damageMultiplier *= 1.25;
-    this.rangeMultiplier *= 1.1;
   }
 
   // Approximate sell value based on base cost and level.

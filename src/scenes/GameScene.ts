@@ -35,6 +35,7 @@ export class GameScene extends Phaser.Scene {
   private gameSpeed = 1; // 1x, 2x, etc.
   private isPaused = false;
   private difficulty: 'normal' | 'hard' = 'normal';
+  private kills = 0;
 
   // UI
   private hudText!: Phaser.GameObjects.Text;
@@ -380,6 +381,7 @@ export class GameScene extends Phaser.Scene {
 
   private handleEnemyKilled(enemy: Enemy): void {
     this.money += enemy.reward;
+    this.kills += 1;
     this.updateHud();
   }
 
