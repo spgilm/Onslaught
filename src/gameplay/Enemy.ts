@@ -1,6 +1,7 @@
 // src/gameplay/Enemy.ts
 // Basic enemy entity that moves along a predefined path.
-// Extended with a simple reward value and slow debuff support.
+// Extended with a simple reward value, slow debuff support,
+// and a small health bar displayed above the enemy.
 import Phaser from 'phaser';
 
 export interface EnemyConfig {
@@ -23,6 +24,11 @@ export class Enemy {
   private slowMultiplier = 1.0;
   private slowTimer = 0; // seconds
 
+  // Health bar
+  private hpBarBg: Phaser.GameObjects.Rectangle;
+  private hpBarFill: Phaser.GameObjects.Rectangle;
+  private hpBarWidth = 30;
+
   constructor(
     private scene: Phaser.Scene,
     path: Phaser.Math.Vector2[],
@@ -37,6 +43,12 @@ export class Enemy {
 
     // Placeholder red circle – swap this for a sprite later.
     this.sprite = scene.add.circle(this.path[0].x, this.path[0].y, 15, 0xe74c3c);
+
+    // Create health bar above the enemy.
+    this.hpBarBg = scene.add.rectangle(this.sprite.x, this.sprite.y - 20, this.hpBarWidth, 4, 0x000000);
+    this.hpBarBg.setDepth(5);
+    this.hpBarFill = scene.add.rectangle(this.sprite.x, this.sprite.y - 20, this.hpBarWidth, 4, 0x2ecc71);
+    this.hpBarFill.setDepth(6);
   }
 
   update(dt: number): void {
@@ -67,6 +79,13 @@ export class Enemy {
 
     const pos = this.getPointOnPath(this.pathProgress);
     this.sprite.setPosition(pos.x, pos.y);
+
+    // Update health bar position and width.
+    this.hpBarBg.setPosition(this.sprite.x, this.sprite.y - 20);
+    const ratio = Phaser.Math.Clamp(this.hp / this.maxHp, 0, 1);
+    const currentWidth = this.hpBarWidth * ratio;
+    this.hpBarFill.setPosition(this.sprite.x - (this.hpBarWidth - currentWidth) / 2, this.sprite.y - 20);
+    this.hpBarFill.width = currentWidth;
   }
 
   isDead(): boolean {
@@ -94,6 +113,8 @@ export class Enemy {
 
   destroy(): void {
     this.sprite.destroy();
+    this.hpBarBg.destroy();
+    this.hpBarFill.destroy();
   }
 
   // --- Path helper methods ---

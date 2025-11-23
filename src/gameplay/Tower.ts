@@ -18,6 +18,7 @@ export interface TowerConfig {
   chainMaxTargets?: number;
   chainFalloff?: number;
   towerTypeId: TowerTypeId;
+  baseCost: number;   // original purchase cost of the tower
 }
 
 export class Tower {
@@ -77,6 +78,14 @@ export class Tower {
     // Simple upgrade logic: slightly increase damage & range.
     this.damageMultiplier *= 1.25;
     this.rangeMultiplier *= 1.1;
+  }
+
+  // Approximate sell value based on base cost and level.
+  getSellValue(): number {
+    const base = this.config.baseCost;
+    const levelBonusFactor = 0.2 * (this.level - 1);
+    const sellFactor = 0.7 + levelBonusFactor;
+    return Math.floor(base * sellFactor);
   }
 
   private findTarget(enemies: Enemy[]): Enemy | null {

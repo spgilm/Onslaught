@@ -154,6 +154,10 @@ export class GameScene extends Phaser.Scene {
     this.createSpeedControls();
 
     // Input handler for tower placement & tower clicks.
+    this.input.keyboard.on('keydown-S', () => {
+      this.trySellSelectedTower();
+    });
+
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       this.handlePointerDown(pointer);
     });
@@ -307,6 +311,7 @@ export class GameScene extends Phaser.Scene {
       chainMaxTargets: towerType.chainMaxTargets,
       chainFalloff: towerType.chainFalloff,
       towerTypeId: towerType.id,
+      baseCost: towerType.cost,
     });
     this.occupiedTiles[row][col] = true;
 
@@ -348,6 +353,7 @@ export class GameScene extends Phaser.Scene {
       chainMaxTargets: baseType.chainMaxTargets,
       chainFalloff: baseType.chainFalloff,
       towerTypeId: baseType.id,
+      baseCost: baseType.cost,
     });
     this.occupiedTiles[row][col] = true;
   }
@@ -369,7 +375,11 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private handleWaveEnded(_waveIndex: number): void {
+  private handleWaveEnded(waveIndex: number): void {
+    // Basic wave clear reward + small interest on current money.
+    const baseReward = 10 + waveIndex * 5;
+    const interest = Math.floor(this.money * 0.05);
+    this.money += baseReward + interest;
     this.updateHud();
   }
 
@@ -604,12 +614,14 @@ export class GameScene extends Phaser.Scene {
     });
 
     const upgradeCost = this.getUpgradeCost(tower);
+    const sellValue = tower.getSellValue();
     const text = this.add.text(
       x,
       y,
       `${tower.config.name ?? 'Tower'} L${tower.level}\n` +
         `DMG: ${tower.getEffectiveDamage().toFixed(1)}\n` +
-        `Upgrade: $${upgradeCost}`,
+        `Upgrade: $${upgradeCost}\n` +
+        `Press S to sell for $${sellValue}`,
       {
         fontSize: '12px',
         color: '#ffffff',
@@ -620,6 +632,36 @@ export class GameScene extends Phaser.Scene {
 
     this.upgradePanel = img;
     this.upgradeText = text;
+  }
+
+
+  private trySellSelectedTower(): void {
+    if (!this.selectedTower) return;
+
+    const sellValue = this.selectedTower.getSellValue();
+    this.money += sellValue;
+
+    // Free the tile
+    const col = Math.floor(this.selectedTower.x / this.tileSize);
+    const row = Math.floor(this.selectedTower.y / this.tileSize);
+    if (row >= 0 && col >= 0 && row < this.rows && col < this.cols) {
+      this.occupiedTiles[row][col] = false;
+    }
+
+    // Remove tower from manager
+    this.towerManager.removeTower(this.selectedTower);
+
+    // Clear UI
+    if (this.upgradePanel) {
+      this.upgradePanel.destroy();
+      this.upgradePanel = undefined;
+    }
+    if (this.upgradeText) {
+      this.upgradeText.destroy();
+      this.upgradeText = undefined;
+    }
+    this.selectedTower = null;
+    this.updateHud();
   }
 
   private getUpgradeCost(tower: Tower): number {
@@ -641,7 +683,8 @@ export class GameScene extends Phaser.Scene {
       this.upgradeText.setText(
         `${this.selectedTower.config.name ?? 'Tower'} L${this.selectedTower.level}\n` +
           `DMG: ${this.selectedTower.getEffectiveDamage().toFixed(1)}\n` +
-          `Upgrade: $${this.getUpgradeCost(this.selectedTower)}`
+          `Upgrade: $${this.getUpgradeCost(this.selectedTower)}\n` +
+          `Press S to sell for $${this.selectedTower.getSellValue()}`
       );
     }
   }

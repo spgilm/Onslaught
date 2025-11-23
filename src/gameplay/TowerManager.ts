@@ -15,6 +15,14 @@ export class TowerManager {
     return tower;
   }
 
+  removeTower(tower: Tower): void {
+    const index = this.towers.indexOf(tower);
+    if (index !== -1) {
+      this.towers[index].sprite.destroy();
+      this.towers.splice(index, 1);
+    }
+  }
+
   getTowers(): Tower[] {
     return this.towers;
   }
