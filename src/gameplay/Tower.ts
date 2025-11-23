@@ -22,7 +22,7 @@ export interface TowerConfig {
 }
 
 export class Tower {
-  public sprite: Phaser.GameObjects.Rectangle;
+  public sprite: Phaser.GameObjects.Rectangle | Phaser.GameObjects.Image;
   public config: TowerConfig;
   public level = 1;
   public damageMultiplier = 1.0;
@@ -43,9 +43,16 @@ export class Tower {
 
     const color = config.color ?? 0x2ecc71;
 
-    // Placeholder square – later replace with sprites.
-    this.sprite = scene.add.rectangle(x, y, 40, 40, color);
-    this.sprite.setStrokeStyle(2, 0x000000);
+    // Use textured sprite if a texture key is provided; otherwise fallback to a colored square.
+    if (config.textureKey) {
+      const img = scene.add.image(x, y, config.textureKey);
+      img.setDisplaySize(40, 40);
+      this.sprite = img;
+    } else {
+      const rect = scene.add.rectangle(x, y, 40, 40, color);
+      rect.setStrokeStyle(2, 0x000000);
+      this.sprite = rect;
+    }
     this.sprite.setData('tower', this);
     this.sprite.setInteractive({ useHandCursor: true });
 

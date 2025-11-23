@@ -33,6 +33,7 @@ export interface TowerType {
 export const TOWER_TYPES: TowerType[] = [
   {
     id: 'gun',
+    textureKey: 'tower_gun',
     name: 'Gun',
     cost: 20,
     range: 200,
@@ -42,6 +43,7 @@ export const TOWER_TYPES: TowerType[] = [
   },
   {
     id: 'slow',
+    textureKey: 'tower_slow',
     name: 'Slow',
     cost: 25,
     range: 180,
@@ -53,6 +55,7 @@ export const TOWER_TYPES: TowerType[] = [
   },
   {
     id: 'splash',
+    textureKey: 'tower_splash',
     name: 'Splash',
     cost: 35,
     range: 190,
@@ -63,6 +66,7 @@ export const TOWER_TYPES: TowerType[] = [
   },
   {
     id: 'chain',
+    textureKey: 'tower_chain',
     name: 'Chain',
     cost: 40,
     range: 210,

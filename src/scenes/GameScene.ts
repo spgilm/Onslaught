@@ -72,6 +72,13 @@ export class GameScene extends Phaser.Scene {
     this.load.image('btn_start_wave', '/assets/onslaught/btn_start_wave.png');
     this.load.image('btn_tower_panel', '/assets/onslaught/btn_tower_panel.png');
     this.load.image('btn_tower_bar', '/assets/onslaught/btn_tower_bar.png');
+
+    // Tower sprites generated from original SWF vector shapes.
+    this.load.image('tower_gun', '/assets/onslaught/towers/tower_gun.png');
+    this.load.image('tower_slow', '/assets/onslaught/towers/tower_slow.png');
+    this.load.image('tower_splash', '/assets/onslaught/towers/tower_splash.png');
+    this.load.image('tower_chain', '/assets/onslaught/towers/tower_chain.png');
+    this.load.image('tower_mod', '/assets/onslaught/towers/tower_mod.png');
   }
 
   create(): void {
