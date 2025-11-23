@@ -45,6 +45,7 @@ export class Tower {
     this.sprite = scene.add.rectangle(x, y, 40, 40, color);
     this.sprite.setStrokeStyle(2, 0x000000);
     this.sprite.setData('tower', this);
+    this.sprite.setInteractive({ useHandCursor: true });
 
     // Optional: draw range circle (debug)
     const rangeCircle = scene.add.circle(x, y, this.getEffectiveRange(), color, 0.08);
