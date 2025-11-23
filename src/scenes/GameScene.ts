@@ -34,6 +34,7 @@ export class GameScene extends Phaser.Scene {
   private isGameOver = false;
   private gameSpeed = 1; // 1x, 2x, etc.
   private isPaused = false;
+  private difficulty: 'normal' | 'hard' = 'normal';
 
   // UI
   private hudText!: Phaser.GameObjects.Text;
@@ -56,6 +57,14 @@ export class GameScene extends Phaser.Scene {
     super('GameScene');
   }
 
+  init(data: { difficulty?: 'normal' | 'hard' }): void {
+    if (data && data.difficulty) {
+      this.difficulty = data.difficulty;
+    } else {
+      this.difficulty = 'normal';
+    }
+  }
+
   preload(): void {
     // Background and buttons from decompiled SWF (served from public/assets).
     this.load.image('bg-onslaught', '/assets/onslaught/bg-1.png');
@@ -66,6 +75,15 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     const { width, height } = this.scale;
+
+    // Set starting money/lives based on difficulty.
+    if (this.difficulty === 'hard') {
+      this.money = 60;
+      this.lives = 10;
+    } else {
+      this.money = 100;
+      this.lives = 20;
+    }
 
     // Background
     const bg = this.add.image(width / 2, height / 2, 'bg-onslaught');
@@ -409,6 +427,26 @@ export class GameScene extends Phaser.Scene {
         color: '#ff5555',
       }
     ).setOrigin(0.5);
+
+    const restartHint = this.add.text(
+      width / 2,
+      height / 2 + 60,
+      'Click to restart or press R',
+      {
+        fontSize: '20px',
+        color: '#ffffff',
+      }
+    ).setOrigin(0.5);
+
+    // Restart on pointer down anywhere.
+    this.input.once('pointerdown', () => {
+      this.scene.restart({ difficulty: this.difficulty });
+    });
+
+    // Restart on R key.
+    this.input.keyboard.once('keydown-R', () => {
+      this.scene.restart({ difficulty: this.difficulty });
+    });
   }
 
   // --- Tower selection bar -------------------------------------------------
