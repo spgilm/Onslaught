@@ -1,11 +1,11 @@
 // src/gameplay/Enemy.ts
 // Basic enemy entity that moves along a predefined path.
-// Extended with a simple reward value for economy purposes.
+// Extended with a simple reward value and slow debuff support.
 import Phaser from 'phaser';
 
 export interface EnemyConfig {
   maxHp: number;
-  speed: number;   // pixels per second
+  speed: number;   // base pixels per second
   reward: number;  // money granted when killed
 }
 
@@ -13,11 +13,15 @@ export class Enemy {
   public sprite: Phaser.GameObjects.Arc;
   public hp: number;
   public maxHp: number;
-  public speed: number;
+  public baseSpeed: number;
   public reward: number;
 
   private path: Phaser.Math.Vector2[];
   private pathProgress = 0; // 0..1
+
+  // Slow debuff
+  private slowMultiplier = 1.0;
+  private slowTimer = 0; // seconds
 
   constructor(
     private scene: Phaser.Scene,
@@ -28,7 +32,7 @@ export class Enemy {
     this.path = path.map(p => p.clone());
     this.maxHp = config.maxHp;
     this.hp = config.maxHp;
-    this.speed = config.speed;
+    this.baseSpeed = config.speed;
     this.reward = config.reward;
 
     // Placeholder red circle – swap this for a sprite later.
@@ -38,7 +42,17 @@ export class Enemy {
   update(dt: number): void {
     if (this.path.length < 2) return;
 
-    const distanceToTravel = this.speed * dt;
+    // Tick slow timer & reset if expired.
+    if (this.slowTimer > 0) {
+      this.slowTimer -= dt;
+      if (this.slowTimer <= 0) {
+        this.slowTimer = 0;
+        this.slowMultiplier = 1.0;
+      }
+    }
+
+    const effectiveSpeed = this.baseSpeed * this.slowMultiplier;
+    const distanceToTravel = effectiveSpeed * dt;
     const totalPathLength = this.getTotalPathLength();
 
     if (totalPathLength <= 0) return;
@@ -46,7 +60,7 @@ export class Enemy {
     const progressDelta = distanceToTravel / totalPathLength;
     this.pathProgress += progressDelta;
 
-    // Clamp at end for now. In a real game, you'd trigger "lives lost" here.
+    // Clamp at end for now.
     if (this.pathProgress >= 1) {
       this.pathProgress = 1;
     }
@@ -66,7 +80,16 @@ export class Enemy {
   takeDamage(amount: number): void {
     this.hp -= amount;
     if (this.hp < 0) this.hp = 0;
-    // Later: add hit flash, death animation, etc.
+  }
+
+  // Apply a slow debuff; if multiple slows hit, we keep the stronger one and longer duration.
+  applySlow(multiplier: number, duration: number): void {
+    if (multiplier < this.slowMultiplier || this.slowTimer <= 0) {
+      this.slowMultiplier = multiplier;
+    }
+    if (duration > this.slowTimer) {
+      this.slowTimer = duration;
+    }
   }
 
   destroy(): void {
@@ -101,8 +124,8 @@ export class Enemy {
         const remaining = targetDistance - accumulated;
         const ratio = remaining / segmentLength;
         return new Phaser.Math.Vector2(
-          Phaser.Math.Linear(a.x, b.x, ratio),
-          Phaser.Math.Linear(a.y, b.y, ratio),
+          a.x + (b.x - a.x) * ratio,
+          a.y + (b.y - a.y) * ratio,
         );
       }
 

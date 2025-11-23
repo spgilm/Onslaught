@@ -15,6 +15,10 @@ export class TowerManager {
     return tower;
   }
 
+  getTowers(): Tower[] {
+    return this.towers;
+  }
+
   update(dt: number, enemies: Enemy[]): void {
     this.towers.forEach(tower => tower.update(dt, enemies));
   }

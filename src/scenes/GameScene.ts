@@ -3,13 +3,18 @@ import { WaveManager } from '../gameplay/WaveManager';
 import { TowerManager } from '../gameplay/TowerManager';
 import { Enemy } from '../gameplay/Enemy';
 import { TOWER_TYPES, TowerTypeId, getTowerType } from '../config/towers';
+import { applyCombos } from '../gameplay/Combos';
+import { Tower } from '../gameplay/Tower';
 
 // Main game scene.
-// Now includes:
-// - Simple grid-based tower placement (click to place towers on valid tiles)
+// Features:
+// - Grid-based tower placement (click to place towers on valid tiles)
 // - Money and lives system with HUD
 // - Multiple waves and a "Start Wave" button
-// - Tower type selection UI bar
+// - Tower type selection bar (Gun, Slow, Splash, Chain)
+// - Basic combo system applying small damage boosts when tower pairs are close
+// - Simple tower upgrade UI when clicking a tower
+// - Background image pulled from decompiled SWF resources
 export class GameScene extends Phaser.Scene {
   private pathPoints: Phaser.Math.Vector2[] = [];
   private waveManager!: WaveManager;
@@ -37,16 +42,27 @@ export class GameScene extends Phaser.Scene {
   private selectedTowerTypeId: TowerTypeId = 'gun';
   private towerButtons: { id: TowerTypeId; rect: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text }[] = [];
 
+  // Tower upgrades
+  private selectedTower: Tower | null = null;
+  private upgradePanel?: Phaser.GameObjects.Rectangle;
+  private upgradeText?: Phaser.GameObjects.Text;
+
   constructor() {
     super('GameScene');
   }
 
   preload(): void {
-    // No assets yet – we’re drawing simple shapes.
+    // Background from decompiled SWF frames (served from public/assets).
+    this.load.image('bg-onslaught', '/assets/onslaught/bg-1.png');
   }
 
   create(): void {
     const { width, height } = this.scale;
+
+    // Background
+    const bg = this.add.image(width / 2, height / 2, 'bg-onslaught');
+    bg.setDisplaySize(width, height);
+    bg.setDepth(-2);
 
     // Compute grid size.
     this.cols = Math.floor(width / this.tileSize);
@@ -95,8 +111,10 @@ export class GameScene extends Phaser.Scene {
     this.add.text(
       16,
       40,
-      `Click on empty tiles (not on the path) to place towers.\n` +
-        `Use the tower bar at the bottom to select tower type.\n` +
+      `Click on empty tiles (not on the path) to place towers.
+` +
+        `Use the tower bar at the bottom to select tower type.
+` +
         `Press "Start Wave" to send the next wave.`,
       {
         fontSize: '14px',
@@ -123,9 +141,16 @@ export class GameScene extends Phaser.Scene {
     // Create start wave button.
     this.createStartWaveButton();
 
-    // Input handler for tower placement.
+    // Input handler for tower placement & tower clicks.
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       this.handlePointerDown(pointer);
+    });
+
+    this.input.on('gameobjectdown', (_pointer: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
+      const tower = (obj as any).getData && (obj as any).getData('tower');
+      if (tower) {
+        this.handleTowerClicked(tower as Tower);
+      }
     });
   }
 
@@ -134,7 +159,11 @@ export class GameScene extends Phaser.Scene {
 
     const dt = delta / 1000;
     this.waveManager.update(dt);
-    this.towerManager.update(dt, this.waveManager.getEnemies());
+    const enemies = this.waveManager.getEnemies();
+
+    // Apply combos before towers fire to adjust multipliers.
+    applyCombos(this.towerManager.getTowers());
+    this.towerManager.update(dt, enemies);
   }
 
   // --- Path / grid helpers -------------------------------------------------
@@ -212,13 +241,12 @@ export class GameScene extends Phaser.Scene {
   private handlePointerDown(pointer: Phaser.Input.Pointer): void {
     if (this.isGameOver) return;
 
-    // Check if clicked on any tower button first.
-    const hitButton = this.tryHandleTowerButtonClick(pointer);
-    if (hitButton) {
+    // Check tower selection UI first.
+    if (this.tryHandleTowerButtonClick(pointer)) {
       return;
     }
 
-    // Check if clicked on start wave button.
+    // Check start wave button.
     if (this.tryHandleStartWaveClick(pointer)) {
       return;
     }
@@ -252,6 +280,13 @@ export class GameScene extends Phaser.Scene {
       damage: towerType.damage,
       color: this.getTowerColor(towerType.id),
       name: towerType.name,
+      behavior: towerType.behavior,
+      slowFactor: towerType.slowFactor,
+      slowDuration: towerType.slowDuration,
+      splashRadius: towerType.splashRadius,
+      chainMaxTargets: towerType.chainMaxTargets,
+      chainFalloff: towerType.chainFalloff,
+      towerTypeId: towerType.id,
     });
     this.occupiedTiles[row][col] = true;
 
@@ -286,6 +321,13 @@ export class GameScene extends Phaser.Scene {
       damage: baseType.damage,
       color: this.getTowerColor('gun'),
       name: baseType.name,
+      behavior: baseType.behavior,
+      slowFactor: baseType.slowFactor,
+      slowDuration: baseType.slowDuration,
+      splashRadius: baseType.splashRadius,
+      chainMaxTargets: baseType.chainMaxTargets,
+      chainFalloff: baseType.chainFalloff,
+      towerTypeId: baseType.id,
     });
     this.occupiedTiles[row][col] = true;
   }
@@ -307,8 +349,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private handleWaveEnded(waveIndex: number): void {
-    // Could show "Wave X cleared!" here later.
+  private handleWaveEnded(_waveIndex: number): void {
     this.updateHud();
   }
 
@@ -382,7 +423,6 @@ export class GameScene extends Phaser.Scene {
     });
 
     if (clicked) {
-      // Update visual selection.
       this.towerButtons.forEach(btn => {
         const color = this.getTowerColor(btn.id);
         const isSelected = btn.id === this.selectedTowerTypeId;
@@ -401,6 +441,8 @@ export class GameScene extends Phaser.Scene {
         return 0x3498db;
       case 'splash':
         return 0xe67e22;
+      case 'chain':
+        return 0x9b59b6;
       default:
         return 0x2ecc71;
     }
@@ -442,5 +484,80 @@ export class GameScene extends Phaser.Scene {
     }
 
     return true;
+  }
+
+  // --- Tower upgrade handling ---------------------------------------------
+
+  private handleTowerClicked(tower: Tower): void {
+    if (this.isGameOver) return;
+    this.selectedTower = tower;
+    this.showUpgradePanel(tower);
+  }
+
+  private showUpgradePanel(tower: Tower): void {
+    if (this.upgradePanel) {
+      this.upgradePanel.destroy();
+      this.upgradePanel = undefined;
+    }
+    if (this.upgradeText) {
+      this.upgradeText.destroy();
+      this.upgradeText = undefined;
+    }
+
+    const x = tower.x + 60;
+    const y = tower.y - 20;
+    const w = 140;
+    const h = 70;
+
+    const rect = this.add.rectangle(x, y, w, h, 0x000000, 0.8);
+    rect.setStrokeStyle(2, 0xffffff);
+    rect.setDepth(20);
+
+    const upgradeCost = this.getUpgradeCost(tower);
+    const text = this.add.text(
+      x,
+      y,
+      `${tower.config.name ?? 'Tower'} L${tower.level}\n` +
+        `DMG: ${tower.getEffectiveDamage().toFixed(1)}\n` +
+        `Upgrade: $${upgradeCost}`,
+      {
+        fontSize: '12px',
+        color: '#ffffff',
+        align: 'center',
+      }
+    ).setOrigin(0.5);
+    text.setDepth(21);
+
+    rect.setInteractive();
+    rect.on('pointerdown', () => {
+      this.tryUpgradeSelectedTower();
+    });
+
+    this.upgradePanel = rect;
+    this.upgradeText = text;
+  }
+
+  private getUpgradeCost(tower: Tower): number {
+    return 15 + tower.level * 10;
+  }
+
+  private tryUpgradeSelectedTower(): void {
+    if (!this.selectedTower) return;
+
+    const cost = this.getUpgradeCost(this.selectedTower);
+    if (this.money < cost) return;
+
+    this.money -= cost;
+    this.selectedTower.upgrade();
+    this.updateHud();
+
+    // Refresh upgrade panel text.
+    if (this.upgradeText) {
+      this.upgradeText.setText(
+        `${this.selectedTower.config.name ?? 'Tower'} L${this.selectedTower.level}\n` +
+          `DMG: ${this.selectedTower.getEffectiveDamage().toFixed(1)}\n` +
+          `Upgrade: $${this.getUpgradeCost(this.selectedTower)}`
+      );
+    }
   }
 }

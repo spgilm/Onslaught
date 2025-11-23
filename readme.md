@@ -141,3 +141,12 @@ When you’re ready, I can help you:
   - A tower selection bar at the bottom to choose tower type before placing.
   - A "Start Wave" button to manually trigger waves.
   - Wave number display in the HUD.
+
+### New in this version (v7)
+
+- Integrated a background image from the decompiled SWF into `public/assets/onslaught/bg-1.png` and wired it into `GameScene`.
+- Expanded `Enemy` to support slow debuffs with duration and multiplier.
+- Expanded `Tower` to support multiple behaviors: single-target, slow, splash (AOE), and chain lightning.
+- Added a simple `Combos` system that boosts tower damage when certain type pairs are placed near each other.
+- Added a 4th tower type ("Chain") in `src/config/towers.ts` and in the selection bar.
+- Implemented a basic tower upgrade system: click a tower to open a small upgrade panel and pay money to increase its level and stats.
